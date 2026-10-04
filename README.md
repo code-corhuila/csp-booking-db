@@ -35,6 +35,38 @@ The single PostgreSQL instance and its volume are defined in `csp-infra-postgres
 | `csp-worker` | Reads the booking outbox through the role `booking_outbox_reader` and never writes the schema |
 | `csp-docs` | Governance, data model, contracts and ADRs |
 
+## Layout
+
+```
+flyway.toml                  locations (the four families), naming validation, schema booking, clean disabled
+01_ddl/ 02_dml/ 03_dcl/ 04_tcl/   migrations V<version>__<description>.sql, by family and sub-folder
+05_rollbacks/                U<version>__<description>.sql: the reversion of every V<version>
+deploy/compose.yml           the migration executor (no database service)
+.github/workflows/db-ci.yml  rebuilds the schema from an empty database on every pull request
+```
+
+The order of the migrations is the version in the file name (`V001`, `V002`, ...): one sequence for the whole
+repository, whatever the folder. A new migration takes the next number, and a migration that is already applied is
+never edited (Flyway refuses it with a checksum error). The history lives in `booking.flyway_schema_history`.
+
+## Run the executor
+
+The instance belongs to `csp-infra-postgres`, which also composes this file. To run the executor alone, start that instance on the `platform` network and, from this repository:
+
+```bash
+cp .env.example .env     # and set the real values; never commit .env
+docker compose -f deploy/compose.yml --env-file .env --profile tooling run --rm booking-db-migrate            # migrate
+docker compose -f deploy/compose.yml --env-file .env --profile tooling run --rm booking-db-migrate validate   # checksums
+```
+
+## Reversion
+
+Flyway Community does not undo, and `flyway undo` is not used here. The reversion of `V<n>` is the script
+`U<n>` in `05_rollbacks/`, applied with `psql` **from the highest version down**. Before `U001`, the control table
+`booking.flyway_schema_history` is dropped, because `U001` drops the schema. `db-ci.yml` runs exactly this order:
+migrate, migrate again (nothing to apply), every `U` script descending, migrate. In production a correction is a new
+forward migration.
+
 ## Branching
 
 Three permanent branches. **None of them accepts a direct commit** — you enter through a child
