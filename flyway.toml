@@ -6,10 +6,6 @@
 # sequence for the whole repository. 05_rollbacks/ is NOT listed: Flyway never
 # runs the U scripts by itself.
 locations = ["filesystem:01_ddl", "filesystem:02_dml", "filesystem:03_dcl", "filesystem:04_tcl"]
-# Own schema and own control table (Annex J.6): the history lives in
-# booking.flyway_schema_history and never collides with another domain.
-schemas = ["booking"]
-defaultSchema = "booking"
 # A file named outside V<version>__<description>.sql fails instead of being ignored.
 validateMigrationNaming = true
 # clean drops everything. It is never needed: reversion is done with the U scripts.
@@ -21,3 +17,11 @@ cleanDisabled = true
 # such a statement non-transactionally and records it.
 [flyway.postgresql.transactional]
 lock = false
+
+# Own schema and own control table (Annex J.6): the history lives in
+# booking.flyway_schema_history and never collides with another domain.
+# These settings belong to the environment; the connection itself (url, user, password)
+# is read from FLYWAY_URL, FLYWAY_USER and FLYWAY_PASSWORD.
+[environments.default]
+schemas = ["booking"]
+defaultSchema = "booking"
