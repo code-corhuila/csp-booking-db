@@ -1,0 +1,23 @@
+# Migration executor of csp-booking-db (Annex J). This file defines NO database service and NO volume:
+# the single PostgreSQL instance of the environment belongs to csp-infra-postgres, which composes this
+# file with `include` and joins the same `platform` network. Run the executor before the API starts.
+name: csp-booking-db
+
+services:
+  booking-db-migrate:
+    image: flyway/flyway:11.20
+    profiles: [tooling]
+    volumes:
+      - ../:/workspace:ro
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?set PG_DATABASE}
+      FLYWAY_USER: ${PG_ADMIN_USER:?set PG_ADMIN_USER}
+      FLYWAY_PASSWORD: ${PG_ADMIN_PASSWORD:?set PG_ADMIN_PASSWORD}
+    entrypoint: ["flyway", "-workingDirectory=/workspace", "-configFiles=flyway.toml"]
+    command: ["migrate"]
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform
+    external: true
