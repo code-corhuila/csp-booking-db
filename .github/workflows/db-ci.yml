@@ -1,0 +1,69 @@
+name: Database rebuild
+
+# The whole migration chain must build the schema from an EMPTY database, every
+# rollback script must undo it, and the chain must apply again afterwards. If the
+# only place the schema works is where it was patched by hand, the next
+# environment cannot exist.
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: csp
+          POSTGRES_USER: ci_admin
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci_admin -d csp"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      PGPASSWORD: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply, roll everything back, apply again
+        run: |
+          fw() {
+            docker run --rm --network host -v "$PWD:/workspace:ro" \
+              -e FLYWAY_URL=jdbc:postgresql://localhost:5432/csp \
+              -e FLYWAY_USER=ci_admin -e FLYWAY_PASSWORD=ci-only \
+              flyway/flyway:11.20 -workingDirectory=/workspace -configFiles=flyway.toml "$@"
+          }
+          sql() { psql -v ON_ERROR_STOP=1 -h localhost -U ci_admin -d csp "$@"; }
+
+          # csp-infra-postgres creates the login users before any executor runs (Annex J.5.5).
+          sql -c "CREATE ROLE booking_app LOGIN PASSWORD 'ci-only'; CREATE ROLE worker_app LOGIN PASSWORD 'ci-only';"
+
+          fw migrate
+          fw migrate | tee second.txt
+          grep -q "No migration necessary" second.txt || { echo "second migrate applied changes: not incremental"; exit 1; }
+
+          # Flyway Community does not undo. The rollback of each V<n> is U<n> in
+          # 05_rollbacks/, applied here from the highest version down. The control
+          # table lives in the schema (Annex J.6) and is dropped before U001.
+          for f in $(find 05_rollbacks -name 'U*.sql' | awk -F/ '{print $NF" "$0}' | sort -r | cut -d' ' -f2); do
+            case "$f" in *U001__*) sql -c "DROP TABLE IF EXISTS booking.flyway_schema_history";; esac
+            echo "rollback $f"; sql -f "$f"
+          done
+          test "$(sql -tAc "select count(*) from pg_namespace where nspname = 'booking'")" = 0 \
+            || { echo "rollbacks left the schema behind"; exit 1; }
+          test "$(sql -tAc "select count(*) from pg_roles where rolname in ('booking_reader', 'booking_writer', 'booking_outbox_reader')")" = 0 \
+            || { echo "rollbacks left roles behind"; exit 1; }
+
+          fw migrate
+          fw validate
