@@ -33,4 +33,5 @@ Added: · Deleted: · Total:  (limit 400, excluding tests and generated files)
 - [ ] Every `V` migration has its `U` script in `05_rollbacks/`
 - [ ] No credentials: roles are `NOLOGIN` and carry no password
 - [ ] Schema follows the data model of `csp-docs` and touches only the `booking` schema
+- [ ] No foreign key and no transaction crosses into another domain (Annex J)
 - [ ] Into `qa` or `main`: every commit was re-applied with `git cherry-pick -x`
