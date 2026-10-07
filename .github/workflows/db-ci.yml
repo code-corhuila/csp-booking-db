@@ -53,6 +53,13 @@ jobs:
           fw migrate | tee second.txt
           grep -q "No migration necessary" second.txt || { echo "second migrate applied changes: not incremental"; exit 1; }
 
+          # U001 drops the whole schema, so it must refuse to run out of order: here every table still exists.
+          if sql -f 05_rollbacks/01_ddl/01_schemas/U001__create_schema_booking.sql; then
+            echo "U001 ran with later objects still in the schema"; exit 1
+          fi
+          test "$(sql -tAc "select count(*) from pg_tables where schemaname = 'booking'")" -gt 1 \
+            || { echo "the refused U001 dropped something"; exit 1; }
+
           # Flyway Community does not undo. The rollback of each V<n> is U<n> in
           # 05_rollbacks/, applied here from the highest version down. The control
           # table lives in the schema (Annex J.6) and is dropped before U001.
