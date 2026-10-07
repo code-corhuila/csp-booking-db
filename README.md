@@ -67,6 +67,11 @@ Flyway Community does not undo, and `flyway undo` is not used here. The reversio
 migrate, migrate again (nothing to apply), every `U` script descending, migrate. In production a correction is a new
 forward migration.
 
+**Never run `U001` unless every later `U` has already run, in reverse order.** `U001` enforces it: it fails, and
+drops nothing, while the schema holds any object other than the control table or while the roles of `V002` exist.
+`db-ci.yml` runs it out of order twice (tables still present, then only the roles left) and checks that it is refused. A `U` script added with a new migration keeps
+this order: it reverts only its own `V`, and it is applied before the ones below it.
+
 ## Outbox retention
 
 `booking.outbox_event` has no purge. The API only inserts into it and `csp-worker` only reads it (`booking_outbox_reader`), and
