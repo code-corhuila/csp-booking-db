@@ -67,6 +67,13 @@ Flyway Community does not undo, and `flyway undo` is not used here. The reversio
 migrate, migrate again (nothing to apply), every `U` script descending, migrate. In production a correction is a new
 forward migration.
 
+## Outbox retention
+
+`booking.outbox_event` has no purge. The API only inserts into it and `csp-worker` only reads it (`booking_outbox_reader`), and
+the publication state lives in the schema `worker` (ADR-014), so a delete by age could remove an event that was never relayed
+while the worker is down. For that reason `booking_writer` has no `DELETE` on the table (`V010`). The table grows until a
+retention change decides who deletes and consults the cursor of the worker first.
+
 ## Branching
 
 Three permanent branches. **None of them accepts a direct commit** — you enter through a child
