@@ -64,7 +64,13 @@ jobs:
           # 05_rollbacks/, applied here from the highest version down. The control
           # table lives in the schema (Annex J.6) and is dropped before U001.
           for f in $(find 05_rollbacks -name 'U*.sql' | awk -F/ '{print $NF" "$0}' | sort -r | cut -d' ' -f2); do
-            case "$f" in *U001__*) sql -c "DROP TABLE IF EXISTS booking.flyway_schema_history";; esac
+            case "$f" in
+              # Every table is gone but the roles of V002 are not: U001 must still refuse.
+              *U002__*) if sql -f 05_rollbacks/01_ddl/01_schemas/U001__create_schema_booking.sql; then
+                          echo "U001 ran with the roles of V002 still present"; exit 1
+                        fi;;
+              *U001__*) sql -c "DROP TABLE IF EXISTS booking.flyway_schema_history";;
+            esac
             echo "rollback $f"; sql -f "$f"
           done
           test "$(sql -tAc "select count(*) from pg_namespace where nspname = 'booking'")" = 0 \
