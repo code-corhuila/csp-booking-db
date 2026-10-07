@@ -69,8 +69,15 @@ forward migration.
 
 **Never run `U001` unless every later `U` has already run, in reverse order.** `U001` enforces it: it fails, and
 drops nothing, while the schema holds any object other than the control table or while the roles of `V002` exist.
-`db-ci.yml` runs it out of order once and checks that it is refused. A `U` script added with a new migration keeps
+`db-ci.yml` runs it out of order twice (tables still present, then only the roles left) and checks that it is refused. A `U` script added with a new migration keeps
 this order: it reverts only its own `V`, and it is applied before the ones below it.
+
+## Outbox retention
+
+`booking.outbox_event` has no purge. The API only inserts into it and `csp-worker` only reads it (`booking_outbox_reader`), and
+the publication state lives in the schema `worker` (ADR-014), so a delete by age could remove an event that was never relayed
+while the worker is down. For that reason `booking_writer` has no `DELETE` on the table (`V010`). The table grows until a
+retention change decides who deletes and consults the cursor of the worker first.
 
 ## Branching
 
