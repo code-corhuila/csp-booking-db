@@ -1,7 +1,0 @@
-Flyway OSS Edition 11.20.3 by Redgate
-
-See release notes here: https://rd.gt/416ObMi
-Database: jdbc:postgresql://host.docker.internal:55433/csp (PostgreSQL 16.15)
-Successfully validated 13 migrations (execution time 00:00.223s)
-Current version of schema "booking": 012
-Schema "booking" is up to date. No migration necessary.
