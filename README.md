@@ -16,7 +16,7 @@ The repository holds the schema, the roles and the grants, and the tables of the
 
 ## Schema
 
-Migrations `V001` to `V011`; every `V<n>` has its `U<n>` in `05_rollbacks/`.
+Migrations `V001` to `V012`; every `V<n>` has its `U<n>` in `05_rollbacks/`.
 
 | Migration | What it creates |
 |---|---|
@@ -29,6 +29,7 @@ Migrations `V001` to `V011`; every `V<n>` has its `U<n>` in `05_rollbacks/`.
 | `V009` | `outbox_event` (the transactional outbox, with no `processed_at`: the worker keeps the state in its own schema) |
 | `V010` | Revokes `DELETE` on `outbox_event` from `booking_writer` (see Outbox retention) |
 | `V011` | The composite keys that tie a seat to its hold: `seat_hold_item` to the showtime of its hold, and `reservation_seat` to its hold and to a held seat |
+| `V012` | Drops `fk_seat_hold_item_hold` of `V005`: the composite key of `V011` already implies it |
 
 The rule that no seat is held twice is the partial unique index `uk_seat_hold_item_active_seat` over
 `(showtime_id, seat_number)` where the status is `HELD` or `CONFIRMED`: a seat becomes available again only when its row
