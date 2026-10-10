@@ -77,6 +77,12 @@ jobs:
               RAISE EXCEPTION 'an item with another showtime of its hold was accepted';
             EXCEPTION WHEN foreign_key_violation THEN NULL;
             END;
+            BEGIN  -- an item of a hold that does not exist: the composite key alone must refuse it (V012)
+              INSERT INTO booking.seat_hold_item (hold_id, showtime_id, seat_number, status)
+                VALUES (gen_random_uuid(), s, 'A3', 'HELD');
+              RAISE EXCEPTION 'an item of a hold that does not exist was accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
             BEGIN  -- a reservation seat that its hold never held
               INSERT INTO booking.reservation_seat (reservation_id, hold_id, seat_number) VALUES (h, h, 'Z9');
               RAISE EXCEPTION 'a seat the hold never held was accepted';
@@ -93,6 +99,9 @@ jobs:
           END
           $$;
           SQL
+          # V012 dropped the single-column key that the composite one made redundant.
+          test "$(sql -tAc "select count(*) from pg_constraint where conname = 'fk_seat_hold_item_hold'")" = 0 \
+            || { echo "the redundant key fk_seat_hold_item_hold is still there"; exit 1; }
 
           # U001 drops the whole schema, so it must refuse to run out of order: here every table still exists.
           if sql -f 05_rollbacks/01_ddl/01_schemas/U001__create_schema_booking.sql; then
