@@ -27,6 +27,8 @@ MVP 2 (Cut 2). The `booking` schema of the stories HU-BOOKING-001, HU-BOOKING-00
 - `V011` ties `seat_hold_item` and `reservation_seat` to their hold with composite foreign keys, backfilling `hold_id` before it
   becomes `NOT NULL`. `csp-booking-api` writes that column since its release 2.0.0, so deploy this schema first.
   ([#30](https://github.com/code-corhuila/csp-booking-db/pull/30))
+- `V012` drops `fk_seat_hold_item_hold`, the single-column key of `V005` that the composite key of `V011` made redundant.
+  ([#38](https://github.com/code-corhuila/csp-booking-db/issues/38))
 
 ### Fixed
 
