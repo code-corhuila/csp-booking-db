@@ -8,6 +8,8 @@
 locations = ["filesystem:01_ddl", "filesystem:02_dml", "filesystem:03_dcl", "filesystem:04_tcl"]
 # A file named outside V<version>__<description>.sql fails instead of being ignored.
 validateMigrationNaming = true
+# Reversion order: U scripts run from the highest version down, and U001 refuses to run (it drops the whole
+# schema) while any later object still exists.
 # clean drops everything. It is never needed: reversion is done with the U scripts.
 cleanDisabled = true
 

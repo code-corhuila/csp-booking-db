@@ -11,8 +11,38 @@ This repository is the **only owner of the `booking` schema** of the Cinesync Pl
 roles and migrations. `csp-booking-api` consumes the schema and never versions it. A migration of booking
 that lives anywhere else is a serious fault (Norma 5.2.1).
 
-The repository currently holds the **base scaffold only**: the layout, the schema, the roles and the rebuild
-verification. The functional tables of booking are added later, each with its own migration and reversion.
+The repository holds the schema, the roles and the grants, and the tables of the three stories of Cut 2 (HU-BOOKING-001,
+002 and 003), each migration with its reversion, plus the rebuild verification that runs on every pull request.
+
+## Schema
+
+Migrations `V001` to `V012`; every `V<n>` has its `U<n>` in `05_rollbacks/`.
+
+| Migration | What it creates |
+|---|---|
+| `V001` | The schema `booking` |
+| `V002` | The roles `booking_reader`, `booking_writer` and `booking_outbox_reader` (all `NOLOGIN`) |
+| `V003` | The grants: `booking_writer` to the login user `booking_app`, `booking_outbox_reader` to `worker_app` |
+| `V004`, `V005` | `seat_hold` (the temporary hold and its snapshots) and `seat_hold_item` (one row per held seat) |
+| `V006`, `V007` | `reservation` (the lifecycle: `HELD`, `CONFIRMED`, `EXPIRED`) and `reservation_seat` |
+| `V008` | `idempotency_key` (one key per hold) |
+| `V009` | `outbox_event` (the transactional outbox, with no `processed_at`: the worker keeps the state in its own schema) |
+| `V010` | Revokes `DELETE` on `outbox_event` from `booking_writer` (see Outbox retention) |
+| `V011` | The composite keys that tie a seat to its hold: `seat_hold_item` to the showtime of its hold, and `reservation_seat` to its hold and to a held seat |
+| `V012` | Drops `fk_seat_hold_item_hold` of `V005`: the composite key of `V011` already implies it |
+
+The rule that no seat is held twice is the partial unique index `uk_seat_hold_item_active_seat` over
+`(showtime_id, seat_number)` where the status is `HELD` or `CONFIRMED`: a seat becomes available again only when its row
+leaves that set (`RELEASED`). The login users are not created here: `csp-infra-postgres` creates them from secrets, and
+the schema assumes them.
+
+## Where the data is
+
+The schema `booking` lives in the database `csp` (`PG_DATABASE`) of the single PostgreSQL instance of
+`csp-infra-postgres`. The executor of this repository connects with `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`, which in
+the platform are the administrator of the instance, because the first migrations create the schema and the roles
+(`csp-booking-db#26` tracks giving it a narrower owner). The service reads and writes as `booking_app` and the worker
+reads the outbox as `worker_app`.
 
 ## Stack
 
@@ -67,6 +97,26 @@ Flyway Community does not undo, and `flyway undo` is not used here. The reversio
 migrate, migrate again (nothing to apply), every `U` script descending, migrate. In production a correction is a new
 forward migration.
 
+**Never run `U001` unless every later `U` has already run, in reverse order.** `U001` enforces it: it fails, and
+drops nothing, while the schema holds any object other than the control table or while the roles of `V002` exist.
+`db-ci.yml` runs it out of order twice (tables still present, then only the roles left) and checks that it is refused. A `U` script added with a new migration keeps
+this order: it reverts only its own `V`, and it is applied before the ones below it.
+
+## Outbox retention
+
+`booking.outbox_event` has no purge. The API only inserts into it and `csp-worker` only reads it (`booking_outbox_reader`), and
+the publication state lives in the schema `worker` (ADR-014), so a delete by age could remove an event that was never relayed
+while the worker is down. For that reason `booking_writer` has no `DELETE` on the table (`V010`). The table grows until a
+retention change decides who deletes and consults the cursor of the worker first.
+
+## What is missing
+
+- **No seed data.** `02_dml/` and `04_tcl/` hold only their folders: the tables start empty.
+- **The executor runs as the administrator** of the instance, not as an owner of the schema (`csp-booking-db#26`).
+- **The schema is not published as a versioned artifact** that `csp-booking-api` could pin by tag instead of by commit
+  (`csp-booking-db#25`).
+- **No outbox purge or retention** (`csp-booking-db#18`), see above.
+
 ## Branching
 
 Three permanent branches. **None of them accepts a direct commit** — you enter through a child
@@ -80,6 +130,8 @@ main     <--PR--  release/...  hotfix/...
 
 Promotion happens **by re-application** (`git cherry-pick -x`), never by merging one permanent
 branch into another: `merge develop -> qa` and `merge qa -> main` do not exist in this model.
+A branch named `qa/...` cannot be created while the branch `qa` exists (Git refuses the reference), so the promotion
+branches of this repository are named `qa-promote/<repo>-<description>` (ADR-021).
 
 `main` requires **1 approval from `ariel5253`**. On `develop` and `qa` the team sets its own review
 rule.

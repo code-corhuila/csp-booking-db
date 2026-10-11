@@ -53,11 +53,74 @@ jobs:
           fw migrate | tee second.txt
           grep -q "No migration necessary" second.txt || { echo "second migrate applied changes: not incremental"; exit 1; }
 
+          # The foreign keys of V011 are what keep the seats of a hold consistent: each inconsistent row must be
+          # refused by the database. The block leaves no data behind.
+          sql <<'SQL'
+          DO $$
+          DECLARE
+            h  CONSTANT uuid := '11111111-1111-4111-8111-111111111111';
+            h2 CONSTANT uuid := '22222222-2222-4222-8222-222222222222';
+            s  CONSTANT uuid := '33333333-3333-4333-8333-333333333333';
+          BEGIN
+            INSERT INTO booking.seat_hold (id, user_id, showtime_id, status, movie_title_snapshot, room_name_snapshot, expires_at)
+              VALUES (h, gen_random_uuid(), s, 'HELD', 'M', 'R', now() + interval '10 min'),
+                     (h2, gen_random_uuid(), s, 'HELD', 'M', 'R', now() + interval '10 min');
+            INSERT INTO booking.seat_hold_item (hold_id, showtime_id, seat_number, status)
+              VALUES (h, s, 'A1', 'HELD'), (h2, s, 'B1', 'HELD');
+            INSERT INTO booking.reservation (id, hold_id, user_id, showtime_id, status)
+              SELECT h, h, user_id, s, 'HELD' FROM booking.seat_hold WHERE id = h;
+            INSERT INTO booking.reservation_seat (reservation_id, hold_id, seat_number) VALUES (h, h, 'A1');
+
+            BEGIN  -- an item whose showtime is not the one of its hold
+              INSERT INTO booking.seat_hold_item (hold_id, showtime_id, seat_number, status)
+                VALUES (h, gen_random_uuid(), 'A2', 'HELD');
+              RAISE EXCEPTION 'an item with another showtime of its hold was accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
+            BEGIN  -- an item of a hold that does not exist: the composite key alone must refuse it (V012)
+              INSERT INTO booking.seat_hold_item (hold_id, showtime_id, seat_number, status)
+                VALUES (gen_random_uuid(), s, 'A3', 'HELD');
+              RAISE EXCEPTION 'an item of a hold that does not exist was accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
+            BEGIN  -- a reservation seat that its hold never held
+              INSERT INTO booking.reservation_seat (reservation_id, hold_id, seat_number) VALUES (h, h, 'Z9');
+              RAISE EXCEPTION 'a seat the hold never held was accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
+            BEGIN  -- a reservation seat that points to the hold of another reservation
+              INSERT INTO booking.reservation_seat (reservation_id, hold_id, seat_number) VALUES (h, h2, 'B1');
+              RAISE EXCEPTION 'a seat of another hold was accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
+
+            DELETE FROM booking.reservation WHERE id = h;
+            DELETE FROM booking.seat_hold WHERE id IN (h, h2);
+          END
+          $$;
+          SQL
+          # V012 dropped the single-column key that the composite one made redundant.
+          test "$(sql -tAc "select count(*) from pg_constraint where conname = 'fk_seat_hold_item_hold'")" = 0 \
+            || { echo "the redundant key fk_seat_hold_item_hold is still there"; exit 1; }
+
+          # U001 drops the whole schema, so it must refuse to run out of order: here every table still exists.
+          if sql -f 05_rollbacks/01_ddl/01_schemas/U001__create_schema_booking.sql; then
+            echo "U001 ran with later objects still in the schema"; exit 1
+          fi
+          test "$(sql -tAc "select count(*) from pg_tables where schemaname = 'booking'")" -gt 1 \
+            || { echo "the refused U001 dropped something"; exit 1; }
+
           # Flyway Community does not undo. The rollback of each V<n> is U<n> in
           # 05_rollbacks/, applied here from the highest version down. The control
           # table lives in the schema (Annex J.6) and is dropped before U001.
           for f in $(find 05_rollbacks -name 'U*.sql' | awk -F/ '{print $NF" "$0}' | sort -r | cut -d' ' -f2); do
-            case "$f" in *U001__*) sql -c "DROP TABLE IF EXISTS booking.flyway_schema_history";; esac
+            case "$f" in
+              # Every table is gone but the roles of V002 are not: U001 must still refuse.
+              *U002__*) if sql -f 05_rollbacks/01_ddl/01_schemas/U001__create_schema_booking.sql; then
+                          echo "U001 ran with the roles of V002 still present"; exit 1
+                        fi;;
+              *U001__*) sql -c "DROP TABLE IF EXISTS booking.flyway_schema_history";;
+            esac
             echo "rollback $f"; sql -f "$f"
           done
           test "$(sql -tAc "select count(*) from pg_namespace where nspname = 'booking'")" = 0 \
