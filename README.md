@@ -109,13 +109,42 @@ the publication state lives in the schema `worker` (ADR-014), so a delete by age
 while the worker is down. For that reason `booking_writer` has no `DELETE` on the table (`V010`). The table grows until a
 retention change decides who deletes and consults the cursor of the worker first.
 
+## Versions
+
+The schema is published as a **version of this repository**: a semantic tag `vX.Y.Z` on `main` (numeral 11.5), with the
+GitHub Release of the same name whose notes are the section of `CHANGELOG.md`. There is no migration image and no separate
+bundle (Annex J keeps only the executor in `deploy/`). The first one is `v2.0.0`, with `V001` to `V012`.
+
+**Cut a version** (the promotion to `main` is a decision of the team lead):
+
+1. Branch `release/X.Y.Z` from `origin/main`. Re-apply with `git cherry-pick -m 1 -x` the merges of `qa` that `main` does
+   not have yet (compare the `(cherry picked from commit ...)` trailers), and add the section `[X.Y.Z]` of `CHANGELOG.md`.
+   Check that `git diff origin/qa HEAD` is empty.
+2. Pull request to `main`; it needs the approval of `ariel5253`. A correction after the approval is one more commit on the
+   same branch (never a force push) and asks for a new review.
+3. After the merge, tag the head of `main` and publish the release:
+
+```bash
+git tag -a vX.Y.Z <sha of the head of main> -m "csp-booking-db X.Y.Z"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file <the section [X.Y.Z] of CHANGELOG.md>
+```
+
+A tag is never moved: a correction is a new version. A migration that was applied is never edited, so a version only adds
+`V<n>` files.
+
+**Consume a version.** A consumer pins the tag, not `develop` and not a commit, so a green run says which published schema
+it tested and a change here cannot break an unrelated pull request. `csp-booking-api` does it in its CI: the checkout of
+this repository uses `ref: v2.0.0` with a read-only deploy key and applies every `V*.sql` file in version order. To move to a
+new version, change that `ref` in a pull request of its own. To try a migration that is not tagged yet, point `ref` at its
+commit in the branch of that pull request and put the tag back before merging.
+
 ## What is missing
 
 - **No seed data.** `02_dml/` and `04_tcl/` hold only their folders: the tables start empty.
 - **The executor runs as the administrator** of the instance, not as an owner of the schema (`csp-booking-db#26`).
-- **The schema is not published as a versioned artifact** that `csp-booking-api` could pin by tag instead of by commit
-  (`csp-booking-db#25`).
-- **No outbox purge or retention** (`csp-booking-db#18`), see above.
+- **No outbox purge or retention, by decision of Cut 2** (`csp-booking-db#18`, closed with that decision), see above: it is
+  reopened when the cursor of the worker can be consulted before deleting.
 
 ## Branching
 

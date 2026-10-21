@@ -8,6 +8,15 @@ and is tagged `v<version>` once it is merged.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-20
+
+Documentation release of the schema repository. The schema is the one of `2.0.0` (`V001` to `V012`): no migration changes, so nothing
+has to be applied.
+
+### Changed
+
+- README: how a schema version is cut and consumed. ([#41](https://github.com/code-corhuila/csp-booking-db/pull/41))
+
 ## [2.0.0] - 2026-10-08
 
 MVP 2 (Cut 2). The `booking` schema of the stories HU-BOOKING-001, HU-BOOKING-002 and HU-BOOKING-003 of
