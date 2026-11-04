@@ -13,6 +13,10 @@ services:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?set PG_DATABASE}
       FLYWAY_USER: ${BOOKING_DB_USER:?set BOOKING_DB_USER}
       FLYWAY_PASSWORD: ${BOOKING_DB_PASSWORD:?set BOOKING_DB_PASSWORD}
+      # When the whole platform starts in one `up`, the instance may not accept connections yet: retry
+      # (about a minute, the pause doubles from 1 s) instead of failing at once. A `depends_on` would not
+      # work here because this file defines no database service.
+      FLYWAY_CONNECT_RETRIES: "6"
     entrypoint: ["flyway", "-workingDirectory=/workspace", "-configFiles=flyway.toml"]
     command: ["migrate"]
     networks: [platform]
