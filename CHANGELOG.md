@@ -8,6 +8,11 @@ and is tagged `v<version>` once it is merged.
 
 ## [Unreleased]
 
+### Changed
+
+- The migration executor retries the connection (`FLYWAY_CONNECT_RETRIES=6`, about a minute) while the instance starts, so a
+  platform started in one `up` no longer leaves the `booking` schema missing. ([#44](https://github.com/code-corhuila/csp-booking-db/issues/44))
+
 ## [2.0.0] - 2026-10-08
 
 MVP 2 (Cut 2). The `booking` schema of the stories HU-BOOKING-001, HU-BOOKING-002 and HU-BOOKING-003 of
