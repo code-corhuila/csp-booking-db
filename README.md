@@ -39,10 +39,14 @@ the schema assumes them.
 ## Where the data is
 
 The schema `booking` lives in the database `csp` (`PG_DATABASE`) of the single PostgreSQL instance of
-`csp-infra-postgres`. The executor of this repository connects with `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`, which in
-the platform are the administrator of the instance, because the first migrations create the schema and the roles
-(`csp-booking-db#26` tracks giving it a narrower owner). The service reads and writes as `booking_app` and the worker
-reads the outbox as `worker_app`.
+`csp-infra-postgres`. The executor of this repository connects with `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`. Since
+`csp-infra-postgres` adopted the `<domain>_migrator` pattern (`csp-booking-db#26`; in its `develop` and `qa`), the env files
+of the platform set them to `booking_migrator` and `BOOKING_MIGRATOR_PASSWORD`: a login that owns the `booking` schema, can
+create roles (`CREATEROLE`, which the migrations need) and has `CREATE` on the database (PostgreSQL checks it even for
+`CREATE SCHEMA IF NOT EXISTS`). It is not the administrator of the instance. An
+environment that has not been moved yet (the `main` of `csp-infra-postgres` until its next release) still runs the executor
+as the administrator of the instance; the steps to move one are in the README of that repository. The service reads and
+writes as `booking_app` and the worker reads the outbox as `worker_app`.
 
 ## Stack
 
@@ -142,7 +146,9 @@ commit in the branch of that pull request and put the tag back before merging.
 ## What is missing
 
 - **No seed data.** `02_dml/` and `04_tcl/` hold only their folders: the tables start empty.
-- **The executor runs as the administrator** of the instance, not as an owner of the schema (`csp-booking-db#26`).
+- **The executor runs as `booking_migrator`** in the environments that have adopted the `<domain>_migrator` pattern
+  (`csp-infra-postgres` `develop` and `qa`); in the environments that have not (`main` until the next release of that
+  repository) it still runs as the administrator of the instance (`csp-booking-db#26`).
 - **No outbox purge or retention, by decision of Cut 2** (`csp-booking-db#18`, closed with that decision), see above: it is
   reopened when the cursor of the worker can be consulted before deleting.
 
