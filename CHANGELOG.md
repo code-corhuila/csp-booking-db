@@ -16,6 +16,8 @@ has to be applied.
 ### Changed
 
 - README: how a schema version is cut and consumed. ([#41](https://github.com/code-corhuila/csp-booking-db/pull/41))
+- The migration executor retries the connection (`FLYWAY_CONNECT_RETRIES=6`, about a minute) while the instance starts, so a
+  platform started in one `up` no longer leaves the `booking` schema missing. ([#44](https://github.com/code-corhuila/csp-booking-db/issues/44))
 
 ## [2.0.0] - 2026-10-08
 
