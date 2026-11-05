@@ -39,10 +39,14 @@ the schema assumes them.
 ## Where the data is
 
 The schema `booking` lives in the database `csp` (`PG_DATABASE`) of the single PostgreSQL instance of
-`csp-infra-postgres`. The executor of this repository connects with `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`, which in
-the platform are the administrator of the instance, because the first migrations create the schema and the roles
-(`csp-booking-db#26` tracks giving it a narrower owner). The service reads and writes as `booking_app` and the worker
-reads the outbox as `worker_app`.
+`csp-infra-postgres`. The executor of this repository connects with `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`. Since
+`csp-infra-postgres` adopted the `<domain>_migrator` pattern (`csp-booking-db#26`; in its `develop` and `qa`), the env files
+of the platform set them to `booking_migrator` and `BOOKING_MIGRATOR_PASSWORD`: a login that owns the `booking` schema, can
+create roles (`CREATEROLE`, which the migrations need) and has `CREATE` on the database (PostgreSQL checks it even for
+`CREATE SCHEMA IF NOT EXISTS`). It is not the administrator of the instance. An
+environment that has not been moved yet (the `main` of `csp-infra-postgres` until its next release) still runs the executor
+as the administrator of the instance; the steps to move one are in the README of that repository. The service reads and
+writes as `booking_app` and the worker reads the outbox as `worker_app`.
 
 ## Stack
 
@@ -109,13 +113,44 @@ the publication state lives in the schema `worker` (ADR-014), so a delete by age
 while the worker is down. For that reason `booking_writer` has no `DELETE` on the table (`V010`). The table grows until a
 retention change decides who deletes and consults the cursor of the worker first.
 
+## Versions
+
+The schema is published as a **version of this repository**: a semantic tag `vX.Y.Z` on `main` (numeral 11.5), with the
+GitHub Release of the same name whose notes are the section of `CHANGELOG.md`. There is no migration image and no separate
+bundle (Annex J keeps only the executor in `deploy/`). The first one is `v2.0.0`, with `V001` to `V012`.
+
+**Cut a version** (the promotion to `main` is a decision of the team lead):
+
+1. Branch `release/X.Y.Z` from `origin/main`. Re-apply with `git cherry-pick -m 1 -x` the merges of `qa` that `main` does
+   not have yet (compare the `(cherry picked from commit ...)` trailers), and add the section `[X.Y.Z]` of `CHANGELOG.md`.
+   Check that `git diff origin/qa HEAD` is empty.
+2. Pull request to `main`; it needs the approval of `ariel5253`. A correction after the approval is one more commit on the
+   same branch (never a force push) and asks for a new review.
+3. After the merge, tag the head of `main` and publish the release:
+
+```bash
+git tag -a vX.Y.Z <sha of the head of main> -m "csp-booking-db X.Y.Z"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file <the section [X.Y.Z] of CHANGELOG.md>
+```
+
+A tag is never moved: a correction is a new version. A migration that was applied is never edited, so a version only adds
+`V<n>` files.
+
+**Consume a version.** A consumer pins the tag, not `develop` and not a commit, so a green run says which published schema
+it tested and a change here cannot break an unrelated pull request. `csp-booking-api` does it in its CI: the checkout of
+this repository uses `ref: v2.0.0` with a read-only deploy key and applies every `V*.sql` file in version order. To move to a
+new version, change that `ref` in a pull request of its own. To try a migration that is not tagged yet, point `ref` at its
+commit in the branch of that pull request and put the tag back before merging.
+
 ## What is missing
 
 - **No seed data.** `02_dml/` and `04_tcl/` hold only their folders: the tables start empty.
-- **The executor runs as the administrator** of the instance, not as an owner of the schema (`csp-booking-db#26`).
-- **The schema is not published as a versioned artifact** that `csp-booking-api` could pin by tag instead of by commit
-  (`csp-booking-db#25`).
-- **No outbox purge or retention** (`csp-booking-db#18`), see above.
+- **The executor runs as `booking_migrator`** in the environments that have adopted the `<domain>_migrator` pattern
+  (`csp-infra-postgres` `develop` and `qa`); in the environments that have not (`main` until the next release of that
+  repository) it still runs as the administrator of the instance (`csp-booking-db#26`).
+- **No outbox purge or retention, by decision of Cut 2** (`csp-booking-db#18`, closed with that decision), see above: it is
+  reopened when the cursor of the worker can be consulted before deleting.
 
 ## Branching
 
