@@ -8,6 +8,20 @@ and is tagged `v<version>` once it is merged.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-20
+
+Documentation and deployment release of the schema repository. The schema is the one of `2.0.0` (`V001` to `V012`): no migration changes, so nothing
+has to be applied. The only change that is not documentation is `FLYWAY_CONNECT_RETRIES` in the executor of `deploy/compose.yml`.
+
+### Changed
+
+- README: how a schema version is cut and consumed. ([#41](https://github.com/code-corhuila/csp-booking-db/pull/41))
+- The migration executor retries the connection (`FLYWAY_CONNECT_RETRIES=6`, about a minute) while the instance starts, so a
+  platform started in one `up` no longer leaves the `booking` schema missing. ([#44](https://github.com/code-corhuila/csp-booking-db/issues/44))
+- The README states which user runs the migrations: `booking_migrator`, the owner of the `booking` schema that
+  `csp-infra-postgres` creates, instead of the instance administrator, in the environments that have adopted the
+  `<domain>_migrator` pattern. ([#26](https://github.com/code-corhuila/csp-booking-db/issues/26))
+
 ## [2.0.0] - 2026-10-08
 
 MVP 2 (Cut 2). The `booking` schema of the stories HU-BOOKING-001, HU-BOOKING-002 and HU-BOOKING-003 of
